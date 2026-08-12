@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Ôn Tập AI Siêu Tốc</title>
+
+    <!-- Thư viện Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- FontAwesome cho icon -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- PDF.js để đọc file PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4f46e5',
+                        secondary: '#10b981',
+                        danger: '#ef4444'
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* CSS cho hiệu ứng lật thẻ Flashcard 3D */
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+
+        .transform-style-3d {
+            transform-style: preserve-3d;
+        }
+
+        .backface-hidden {
+            backface-visibility: hidden;
+        }
+
+        .rotate-y-180 {
+            transform: rotateY(180deg);
+        }
+
+        .flip-card-inner {
+            transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+        }
+
+        /* Chỉnh thanh cuộn đẹp hơn */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c7c7cc;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a0a0a5;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
+
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center">
+                    <i class="fa-solid fa-brain text-primary text-2xl mr-3"></i>
+                    <h1 class="font-bold text-xl text-gray-900">AI Study Master</h1>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <!-- Nút Làm Mới Câu Hỏi -->
+                    <button id="refreshBtn" onclick="generateQuestionsWithAI()"
+                        class="hidden inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-indigo-700 shadow-sm transition-colors">
+                        <i class="fa-solid fa-rotate-right mr-2"></i>
+                        <span class="hidden sm:inline">Tạo bộ câu hỏi mới</span>
+                        <span class="sm:hidden">Mới</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10" id="mainContainer">
+
+        <!-- MÀN HÌNH 1: TRẠNG THÁI KHỞI ĐỘNG VÀ NÚT TẠO CÂU HỎI -->
+        <div id="initialScreen"
+            class="bg-white rounded-2xl shadow-xl p-8 sm:p-12 border border-gray-100 text-center max-w-2xl mx-auto mt-4 transition-all">
+            <div class="mb-8">
+                <i class="fa-solid fa-graduation-cap text-6xl text-primary mb-6"></i>
+                <h2 class="text-3xl font-extrabold text-gray-900 mb-3">Sẵn sàng ôn tập!</h2>
+                <p class="text-gray-500">Hệ thống tự động nhận diện tài liệu trong thư mục và dùng AI để tạo câu hỏi
+                    trắc nghiệm.</p>
+            </div>
+
+            <div id="docStatus"
+                class="mb-8 p-4 bg-indigo-50 rounded-xl text-sm text-indigo-700 font-medium flex items-center justify-center border border-indigo-100">
+                <i class="fa-solid fa-spinner fa-spin mr-3 text-lg"></i> Đang tự động nạp tài liệu (1.pdf - 7.pdf)...
+            </div>
+
+            <button id="generateBtn" disabled onclick="generateQuestionsWithAI()"
+                class="w-full py-4 bg-gray-400 text-white rounded-xl font-bold text-xl shadow-lg transition-all flex items-center justify-center cursor-not-allowed">
+                <i class="fa-solid fa-wand-magic-sparkles mr-3"></i> Tạo câu hỏi để học
+            </button>
+        </div>
+
+        <!-- MÀN HÌNH 2: LOADING GỌI API GEMINI -->
+        <div id="loadingScreen"
+            class="hidden bg-white rounded-2xl shadow-xl p-10 border border-gray-100 text-center min-h-[50vh] flex flex-col justify-center items-center max-w-2xl mx-auto mt-4">
+            <div class="relative w-24 h-24 mb-6">
+                <div class="absolute inset-0 border-4 border-indigo-100 rounded-full"></div>
+                <div class="absolute inset-0 border-4 border-primary rounded-full border-t-transparent animate-spin">
+                </div>
+                <div class="absolute inset-0 flex items-center justify-center"><i
+                        class="fa-solid fa-robot text-3xl text-primary animate-pulse"></i></div>
+            </div>
+            <h3 class="text-2xl font-bold text-gray-800 mb-2">AI đang phân tích tài liệu...</h3>
+            <p class="text-gray-500">Đang đọc hiểu nội dung và sáng tạo 20 câu hỏi mới (mất khoảng 15-30 giây)</p>
+        </div>
+
+        <!-- MÀN HÌNH 3: HỌC TẬP -->
+        <div id="studyScreen" class="hidden">
+            <!-- Tabs điều hướng chế độ -->
+            <div class="flex space-x-1 bg-gray-200 p-1 rounded-xl w-full max-w-md mx-auto mb-8">
+                <button onclick="switchMode('flashcard')" id="tabFlashcard"
+                    class="flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-primary shadow-sm transition-all">
+                    <i class="fa-solid fa-layer-group mr-1"></i> Học Flashcard
+                </button>
+                <button onclick="switchMode('quiz')" id="tabQuiz"
+                    class="flex-1 py-2 px-4 rounded-lg font-bold text-sm text-gray-600 hover:text-gray-900 transition-all">
+                    <i class="fa-solid fa-list-check mr-1"></i> Thi Trắc Nghiệm
+                </button>
+            </div>
+
+            <!-- Khu vực hiện Flashcard -->
+            <div id="flashcardContainer" class="max-w-2xl mx-auto relative h-[400px]">
+                <!-- Các thẻ sẽ được render ở đây qua JS -->
+            </div>
+
+            <!-- Điều hướng Flashcard -->
+            <div id="flashcardControls"
+                class="max-w-2xl mx-auto mt-6 flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <button onclick="prevCard()"
+                    class="px-4 py-2 bg-gray-100 text-gray-700 font-bold rounded hover:bg-gray-200 transition-colors"><i
+                        class="fa-solid fa-chevron-left mr-2"></i> Câu trước</button>
+                <span id="cardCounter" class="font-bold text-gray-500 bg-gray-100 px-4 py-1 rounded-full">1 / 20</span>
+                <button onclick="nextCard()"
+                    class="px-4 py-2 bg-primary text-white font-bold rounded hover:bg-indigo-700 transition-colors">Câu
+                    tiếp <i class="fa-solid fa-chevron-right ml-2"></i></button>
+            </div>
+
+            <!-- Khu vực hiện Bài Test Trắc nghiệm (ẩn mặc định) -->
+            <div id="quizContainer"
+                class="max-w-3xl mx-auto hidden bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                <div id="quizQuestionsList" class="space-y-8">
+                    <!-- Danh sách câu hỏi render qua JS -->
+                </div>
+                <div class="mt-8 pt-6 border-t border-gray-200 text-center">
+                    <button id="submitQuizBtn" onclick="submitQuiz()"
+                        class="px-8 py-3 bg-secondary text-white font-bold text-lg rounded-xl hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-200">
+                        Nộp Bài & Xem Điểm
+                    </button>
+                    <div id="quizScoreDisplay" class="hidden mt-6 p-6 bg-indigo-50 border-2 border-primary rounded-xl">
+                        <!-- Điểm số hiện ở đây -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- FOOTER CHỮ KÝ -->
+    <footer class="bg-white border-t border-gray-200 mt-auto py-5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center items-center">
+            <p class="text-gray-500 text-sm font-medium hover:text-primary transition-colors duration-300">
+                @ Design by Thanh Nguyên xinh đẹp
+            </p>
+        </div>
+    </footer>
+
+    <div id="toast"
+        class="fixed bottom-5 right-5 transform translate-y-20 opacity-0 transition-all duration-300 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-xl flex items-center z-[120]">
+        <i class="fa-solid fa-circle-check text-secondary mr-3 text-xl"></i>
+        <span id="toastMessage" class="font-medium">Thành công!</span>
+    </div>
+
+    <script>
+        // CẤU HÌNH HỆ THỐNG
+        const MY_GEMINI_API_KEY = "AIzaSyAa2SG42En_Yz_mXcy4prraaQQwZUOVmLA";
+        const CONFIG = { QUESTIONS_PER_SESSION: 20 };
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        let state = {
+            pdfTexts: [],
+            questions: [],
+            quizQuestions: [], // Mảng riêng cho phần thi trắc nghiệm (để xáo trộn)
+            currentCardIndex: 0,
+            mode: 'flashcard',
+            quizAnswers: {}
+        };
+
+        // Hàm xáo trộn mảng (Fisher-Yates Shuffle)
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // TỰ ĐỘNG NẠP TÀI LIỆU KHI MỞ TRANG
+        window.addEventListener('DOMContentLoaded', async () => {
+            const docStatus = document.getElementById('docStatus');
+            const generateBtn = document.getElementById('generateBtn');
+
+            state.pdfTexts = [];
+            let loadedCount = 0;
+            let loadedFilesNames = [];
+
+            // Cố gắng tải từ 1.pdf đến 7.pdf
+            for (let i = 1; i <= 7; i++) {
+                try {
+                    const response = await fetch(`./${i}.pdf`);
+                    if (response.ok) {
+                        const arrayBuffer = await response.arrayBuffer();
+                        const text = await extractTextFromPDFBuffer(arrayBuffer);
+                        state.pdfTexts.push({ name: `${i}.pdf`, text: text });
+                        loadedFilesNames.push(`${i}.pdf`);
+                        loadedCount++;
+                    }
+                } catch (e) {
+                    // Bỏ qua nếu file không tồn tại
+                }
+            }
+
+            if (loadedCount > 0) {
+                // Cập nhật UI thông báo thành công
+                docStatus.className = "mb-8 p-4 bg-emerald-50 rounded-xl text-sm text-emerald-800 font-medium flex flex-col items-center justify-center border border-emerald-200";
+                docStatus.innerHTML = `
+                    <div class="flex items-center text-lg mb-2"><i class="fa-solid fa-check-circle mr-2 text-emerald-600"></i> Đã nạp thành công ${loadedCount} tài liệu!</div>
+                    <div class="text-emerald-600 text-xs font-normal bg-white px-3 py-1 rounded-md border border-emerald-100">${loadedFilesNames.join(', ')}</div>
+                `;
+
+                // Kích hoạt nút Tạo câu hỏi
+                generateBtn.disabled = false;
+                generateBtn.classList.remove('bg-gray-400', 'cursor-not-allowed');
+                generateBtn.classList.add('bg-primary', 'hover:bg-indigo-700', 'shadow-indigo-200');
+
+                showToast("Đã nạp xong tài liệu từ thư mục!");
+            } else {
+                // Thông báo lỗi nếu không có file nào
+                docStatus.className = "mb-8 p-4 bg-red-50 rounded-xl text-sm text-red-700 font-medium flex flex-col items-center justify-center border border-red-200";
+                docStatus.innerHTML = `
+                    <div class="flex items-center text-base"><i class="fa-solid fa-triangle-exclamation mr-2"></i> Không tìm thấy file PDF nào!</div>
+                    <div class="text-xs font-normal mt-1 text-red-500">Vui lòng đảm bảo các file được đặt tên là 1.pdf, 2.pdf... và để chung thư mục với file HTML này.</div>
+                `;
+            }
+        });
+
+        // Hàm đọc Text từ ArrayBuffer của PDF
+        async function extractTextFromPDFBuffer(arrayBuffer) {
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let text = "";
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                text += content.items.map(item => item.str).join(" ") + "\n";
+            }
+            return text;
+        }
+
+        // GỌI AI GEMINI ĐỂ TẠO CÂU HỎI
+        async function generateQuestionsWithAI() {
+            if (state.pdfTexts.length === 0) return;
+
+            // Chuyển màn hình sang trạng thái Loading
+            document.getElementById('initialScreen').classList.add('hidden');
+            document.getElementById('studyScreen').classList.add('hidden');
+            document.getElementById('loadingScreen').classList.remove('hidden');
+
+            let allText = state.pdfTexts.map(doc => doc.text).join("\n\n");
+            let contextChunk = "";
+
+            const MAX_CHARS = 20000;
+            if (allText.length > MAX_CHARS) {
+                const startIndex = Math.floor(Math.random() * (allText.length - MAX_CHARS));
+                contextChunk = allText.substring(startIndex, startIndex + MAX_CHARS);
+            } else {
+                contextChunk = allText;
+            }
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${MY_GEMINI_API_KEY}`;
+            const prompt = `Dựa vào phần tài liệu học tập được cung cấp dưới đây, hãy tạo ra đúng ${CONFIG.QUESTIONS_PER_SESSION} câu hỏi trắc nghiệm dùng để ôn tập.
+            Yêu cầu:
+            1. Mỗi câu hỏi phải có 4 đáp án (A, B, C, D).
+            2. Phải có lời giải thích ngắn gọn, dễ hiểu HOẶC một mẹo ghi nhớ vui nhộn giúp học sinh nhớ lâu đáp án này.
+            3. TRẢ VỀ CHỈ MỘT MẢNG JSON hợp lệ. KHÔNG GHI THÊM BẤT KỲ VĂN BẢN NÀO KHÁC BÊN NGOÀI JSON (Không dùng markdown \`\`\`json).
+            
+            Định dạng JSON yêu cầu:
+            [
+              {
+                "question": "Nội dung câu hỏi",
+                "options": ["A. Đáp án 1", "B. Đáp án 2", "C. Đáp án 3", "D. Đáp án 4"],
+                "correctAnswerIndex": 0,
+                "explanation": "Giải thích hoặc mẹo ghi nhớ."
+              }
+            ]
+
+            Tài liệu tham khảo:
+            '''
+            ${contextChunk}
+            '''
+            `;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { temperature: 0.7 }
+                    })
+                });
+
+                if (!response.ok) throw new Error("Lỗi khi kết nối với máy chủ AI.");
+
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0) {
+                    let textResult = result.candidates[0].content.parts[0].text;
+                    textResult = textResult.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+                    state.questions = JSON.parse(textResult);
+
+                    // Tạo bản sao xáo trộn thứ tự câu hỏi cho phần thi trắc nghiệm
+                    state.quizQuestions = shuffleArray([...state.questions]);
+
+                    // Reset trạng thái làm bài
+                    state.quizAnswers = {};
+                    state.currentCardIndex = 0;
+                    document.getElementById('quizScoreDisplay').classList.add('hidden');
+                    document.getElementById('submitQuizBtn').classList.remove('hidden');
+                    document.getElementById('refreshBtn').classList.remove('hidden');
+
+                    // Dựng UI
+                    renderFlashcards();
+                    renderQuiz();
+                    switchMode('flashcard');
+
+                    // Chuyển màn hình
+                    document.getElementById('loadingScreen').classList.add('hidden');
+                    document.getElementById('studyScreen').classList.remove('hidden');
+                    showToast("Đã tạo câu hỏi thành công!");
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Lỗi tạo câu hỏi: Đã có lỗi xảy ra hoặc AI trả về sai định dạng. Vui lòng thử lại!");
+                document.getElementById('loadingScreen').classList.add('hidden');
+                document.getElementById('initialScreen').classList.remove('hidden');
+            }
+        }
+
+        function renderFlashcards() {
+            const container = document.getElementById('flashcardContainer');
+            container.innerHTML = '';
+
+            state.questions.forEach((q, index) => {
+                const cardWrapper = document.createElement('div');
+                cardWrapper.className = `absolute inset-0 w-full h-full perspective-1000 cursor-pointer ${index === 0 ? 'block' : 'hidden'} transition-opacity duration-300`;
+                cardWrapper.id = `flashcard-${index}`;
+
+                const cardInner = document.createElement('div');
+                cardInner.className = `relative w-full h-full transform-style-3d flip-card-inner rounded-2xl shadow-md border border-gray-200 hover:shadow-xl transition-shadow`;
+                cardWrapper.onclick = () => {
+                    cardInner.style.transform = cardInner.style.transform === 'rotateY(180deg)' ? 'rotateY(0deg)' : 'rotateY(180deg)';
+                };
+
+                // Mặt trước
+                const cardFront = document.createElement('div');
+                cardFront.className = `absolute w-full h-full backface-hidden bg-white rounded-2xl p-8 flex flex-col justify-center items-center text-center`;
+                cardFront.innerHTML = `
+                    <span class="absolute top-4 left-4 bg-primary text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">Câu ${index + 1} / ${state.questions.length}</span>
+                    <h3 class="text-xl sm:text-2xl font-bold text-gray-800 mb-4 leading-relaxed max-w-lg">${q.question}</h3>
+                    <div class="my-6">
+                        <i class="fa-solid fa-circle-question text-6xl text-indigo-50 opacity-80"></i>
+                    </div>
+                    <p class="absolute bottom-4 text-gray-400 text-sm animate-pulse flex items-center"><i class="fa-solid fa-hand-pointer mr-2"></i> Chạm để lật xem đáp án</p>
+                `;
+
+                // Mặt sau (Đáp án & Giải thích)
+                const cardBack = document.createElement('div');
+                cardBack.className = `absolute w-full h-full backface-hidden rotate-y-180 bg-emerald-50 rounded-2xl p-8 flex flex-col justify-center items-center text-center border-2 border-secondary`;
+
+                let correctText = q.options[q.correctAnswerIndex];
+                // Dùng Regex để loại bỏ tiền tố A. B. C. D. ở đầu câu
+                correctText = correctText.replace(/^[A-D]\.\s*/i, '');
+
+                cardBack.innerHTML = `
+                    <div class="mb-4 text-secondary text-5xl"><i class="fa-solid fa-circle-check"></i></div>
+                    <h4 class="text-xl font-bold text-gray-800 mb-2">Đáp án đúng:</h4>
+                    <div class="p-4 bg-white border border-emerald-200 rounded-xl text-emerald-800 font-bold mb-6 w-full text-lg shadow-sm">${correctText}</div>
+                    <div class="text-left w-full bg-white p-4 rounded-xl border border-emerald-100 shadow-sm overflow-y-auto max-h-32">
+                        <p class="text-sm font-bold text-emerald-700 mb-1"><i class="fa-solid fa-lightbulb text-yellow-500 mr-1"></i> Giải thích:</p>
+                        <p class="text-gray-700 text-sm leading-relaxed">${q.explanation}</p>
+                    </div>
+                `;
+
+                cardInner.appendChild(cardFront);
+                cardInner.appendChild(cardBack);
+                cardWrapper.appendChild(cardInner);
+                container.appendChild(cardWrapper);
+            });
+            updateCardCounter();
+        }
+
+        function nextCard() {
+            if (state.currentCardIndex < state.questions.length - 1) {
+                document.getElementById(`flashcard-${state.currentCardIndex}`).classList.replace('block', 'hidden');
+                state.currentCardIndex++;
+                document.getElementById(`flashcard-${state.currentCardIndex}`).classList.replace('hidden', 'block');
+                updateCardCounter();
+            }
+        }
+
+        function prevCard() {
+            if (state.currentCardIndex > 0) {
+                document.getElementById(`flashcard-${state.currentCardIndex}`).classList.replace('block', 'hidden');
+                state.currentCardIndex--;
+                document.getElementById(`flashcard-${state.currentCardIndex}`).classList.replace('hidden', 'block');
+                updateCardCounter();
+            }
+        }
+
+        function updateCardCounter() {
+            document.getElementById('cardCounter').innerText = `${state.currentCardIndex + 1} / ${state.questions.length}`;
+        }
+
+        function renderQuiz() {
+            const list = document.getElementById('quizQuestionsList');
+            list.innerHTML = '';
+
+            state.quizQuestions.forEach((q, qIndex) => {
+                const qDiv = document.createElement('div');
+                qDiv.className = 'p-5 sm:p-6 bg-gray-50 rounded-xl border border-gray-200';
+
+                let optionsHtml = q.options.map((opt, oIndex) => `
+                    <label class="flex items-center p-3 sm:p-4 border rounded-lg cursor-pointer hover:bg-indigo-50 transition-colors mb-2 bg-white" id="label-q${qIndex}-o${oIndex}">
+                        <input type="radio" name="question_${qIndex}" value="${oIndex}" class="w-5 h-5 text-primary border-gray-300 focus:ring-primary mr-3" onchange="saveAnswer(${qIndex}, ${oIndex})">
+                        <span class="text-gray-700 text-sm sm:text-base">${opt}</span>
+                    </label>
+                `).join('');
+
+                qDiv.innerHTML = `
+                    <h4 class="font-bold text-base sm:text-lg text-gray-900 mb-4 leading-relaxed"><span class="text-primary mr-1">Câu ${qIndex + 1}:</span> ${q.question}</h4>
+                    <div class="space-y-2">${optionsHtml}</div>
+                    <div id="explanation-${qIndex}" class="hidden mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                        <p class="font-bold text-emerald-800 mb-2"><i class="fa-solid fa-check mr-1"></i> Đáp án đúng: ${q.options[q.correctAnswerIndex]}</p>
+                        <p class="text-gray-700 text-sm bg-white p-3 rounded border border-emerald-100">${q.explanation}</p>
+                    </div>
+                `;
+                list.appendChild(qDiv);
+            });
+        }
+
+        function saveAnswer(qIndex, oIndex) {
+            state.quizAnswers[qIndex] = oIndex;
+        }
+
+        function submitQuiz() {
+            let score = 0;
+            const total = state.quizQuestions.length;
+
+            state.quizQuestions.forEach((q, qIndex) => {
+                const userAns = state.quizAnswers[qIndex];
+                const correctAns = q.correctAnswerIndex;
+
+                document.getElementById(`explanation-${qIndex}`).classList.remove('hidden');
+                document.getElementsByName(`question_${qIndex}`).forEach(r => r.disabled = true);
+
+                if (userAns !== undefined) {
+                    if (userAns === correctAns) {
+                        score++;
+                        document.getElementById(`label-q${qIndex}-o${userAns}`).className = "flex items-center p-3 sm:p-4 border-2 border-emerald-500 bg-emerald-50 rounded-lg mb-2";
+                    } else {
+                        document.getElementById(`label-q${qIndex}-o${userAns}`).className = "flex items-center p-3 sm:p-4 border-2 border-red-500 bg-red-50 rounded-lg mb-2";
+                        document.getElementById(`label-q${qIndex}-o${correctAns}`).className = "flex items-center p-3 sm:p-4 border-2 border-emerald-500 bg-emerald-50 rounded-lg mb-2";
+                    }
+                } else {
+                    document.getElementById(`label-q${qIndex}-o${correctAns}`).className = "flex items-center p-3 sm:p-4 border-2 border-emerald-500 bg-emerald-50 rounded-lg mb-2";
+                }
+            });
+
+            const scoreDisplay = document.getElementById('quizScoreDisplay');
+            scoreDisplay.innerHTML = `
+                <h3 class="text-3xl font-extrabold text-indigo-900 mb-2">Điểm của bạn: ${score} / ${total}</h3>
+                <p class="text-gray-600 font-medium">Độ chính xác: ${Math.round((score / total) * 100)}%</p>
+                <p class="text-sm mt-3 text-indigo-600 bg-white inline-block px-3 py-1 rounded-full border border-indigo-100">Hãy kéo lên trên để xem chi tiết đáp án và lời giải.</p>
+            `;
+            scoreDisplay.classList.remove('hidden');
+            document.getElementById('submitQuizBtn').classList.add('hidden');
+            scoreDisplay.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function switchMode(mode) {
+            state.mode = mode;
+            const isFlashcard = mode === 'flashcard';
+
+            document.getElementById('flashcardContainer').classList.toggle('hidden', !isFlashcard);
+            document.getElementById('flashcardControls').classList.toggle('hidden', !isFlashcard);
+            document.getElementById('quizContainer').classList.toggle('hidden', isFlashcard);
+
+            document.getElementById('tabFlashcard').className = isFlashcard
+                ? "flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-primary shadow-sm transition-all"
+                : "flex-1 py-2 px-4 rounded-lg font-bold text-sm text-gray-600 hover:text-gray-900 transition-all";
+
+            document.getElementById('tabQuiz').className = !isFlashcard
+                ? "flex-1 py-2 px-4 rounded-lg font-bold text-sm bg-white text-primary shadow-sm transition-all"
+                : "flex-1 py-2 px-4 rounded-lg font-bold text-sm text-gray-600 hover:text-gray-900 transition-all";
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').innerText = message;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+        }
+    </script>
+</body>
+
+</html>
